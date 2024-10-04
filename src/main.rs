@@ -26,7 +26,7 @@ fn model(app: &App) -> Model {
     let num = 0.0;
     let mut points = vec![];
 
-    for i in 0..1000 {
+    for i in 0..100 {
         let x = random_range(-500.0, 500.0);
         let y = random_range(-500.0, 500.0);
         let point = RefCell::new(vec2(x, y));
@@ -34,7 +34,7 @@ fn model(app: &App) -> Model {
     }
     let mut tree = Tree::new(vec2(-500.0, -500.0), vec2(500.0, 500.0));
     for point in &points {
-        tree.add_point(point.clone(), |p| p.len() < 2);
+        tree.add_point(point.clone());
     }    
     Model {
         egui,
@@ -46,11 +46,13 @@ fn model(app: &App) -> Model {
 
 fn update(app: &App, model: &mut Model, update: Update) {
     render_egui(&mut model.egui);
-    // println!("{}", model.tree.size());
+    println!("{}", model.tree.size());
     for point in &model.points {
-        point.borrow_mut().x += random_range(-1.0, 1.0);
-        point.borrow_mut().y += random_range(-1.0, 1.0);
+        point.borrow_mut().x += random_range(-1.0, 1.0) * 5.0;
+        point.borrow_mut().y += random_range(-1.0, 1.0) * 5.0;
     }
+
+    model.tree.update();
 
 
 
@@ -58,15 +60,12 @@ fn update(app: &App, model: &mut Model, update: Update) {
     // when clicked, add a point to the tree but not when held
     // if app.mouse.buttons.left().is_down() && model.once {
     //     let mouse = app.mouse.position();
-    //     model.tree.add_point(Rc::new(vec2(mouse.x, mouse.y)), |p| p.len() < 2);
+    //     model.tree.add_point(Rc::new(RefCell::new(vec2(mouse.x, mouse.y))));
     //     model.once = false;
-    // } else if (!app.mouse.buttons.left().is_down()) {
+    //     println!("up");
+    // } 
+    // if app.mouse.buttons.left().is_up() {
     //     model.once = true;
-    // }
-
-    // if app.mouse.buttons.left().is_down() {
-    //     let mouse = app.mouse.position();
-    //     model.tree.add_point(Rc::new(vec2(mouse.x, mouse.y)), |p| p.len() < 2);
     // }
 
 }
