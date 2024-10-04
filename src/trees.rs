@@ -1,6 +1,6 @@
 use geom::point;
 use nannou::{glam::Vec2Swizzles, prelude::*};
-use std::{borrow::Borrow, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 pub struct Tree {
     pub node: Option<Node>,
@@ -9,7 +9,7 @@ pub struct Tree {
 pub struct Node {
     min: Vec2,
     max: Vec2,
-    points: Vec<Rc<Vec2>>,
+    points: Vec<Rc<RefCell<Vec2>>>,
     children: Box<[Option<Node>; 4]>,
     length: usize,
 }
@@ -24,7 +24,7 @@ impl Tree {
 }
 
 impl Node {
-    pub fn new(min: Vec2, max: Vec2, points: Vec<Rc<Vec2>>) -> Self{
+    pub fn new(min: Vec2, max: Vec2, points: Vec<Rc<RefCell<Vec2>>>) -> Self{
         Node {
             min,
             max,
@@ -39,10 +39,10 @@ impl NodeTrait for Node{
     fn point_inside(&self, point:&Rc<Vec2>) -> bool{
         point.x < self.max.x && point.x > self.min.x && point.y < self.min.y && point.y > self.min.y
     }
-    fn quarter(&self, point:&Rc<Vec2>) -> Vec2{
+    fn quarter(&self, point:&Rc<RefCell<Vec2>>) -> Vec2{
         let middle_point = (self.min + self.max)/2.0;
 
-        let direction = (point.xy() - middle_point).normalize();
+        let direction = (point.borrow().xy() - middle_point).normalize();
  
         // which quarter is the point in the node?
         let mut quarter = Vec2::new(0.0, 0.0);
@@ -62,12 +62,12 @@ impl NodeTrait for Node{
         quarter
     }
     // TODO: add node
-    fn add_point<C>(&mut self, point: Rc<Vec2>, condition: C)
-    where C: Fn(&Vec<Rc<Vec2>>) -> bool{
+    fn add_point<C>(&mut self, point: Rc<RefCell<Vec2>>, condition: C)
+    where C: Fn(&Vec<Rc<RefCell<Vec2>>>) -> bool{
         let quarter = self.quarter(&point);
         let index = self.quarter_index(quarter);
 
-        println!("{:?}", self.points);
+        // println!("{:?}", self.points);
         self.points.push(point.clone());
         if !condition(&self.points){
             if self.children[index].is_none() {
@@ -76,7 +76,7 @@ impl NodeTrait for Node{
                 self.children[index] = Some(new_node);
                 return;
             }
-            self.children[index].as_mut().unwrap().add_point(Rc::clone(&point), condition);
+            self.children[index].as_mut().unwrap().add_point((Rc::clone(&point)), condition);
         }
         
         
@@ -128,7 +128,7 @@ impl NodeTrait for Node{
         let quarter_node;
         let middle_point = (self.min + self.max)/2.0;
         let mut position = Vec2::new(0.0, 0.0);
-        let mut points_inside: Vec<Rc<Vec2>> = Vec::new();
+        let mut points_inside: Vec<Rc<RefCell<Vec2>>> = Vec::new();
         if quarter == vec2(-1.0, 1.0) {
             let min = vec2(self.min.x, middle_point.y);
             let max = vec2(middle_point.x, self.max.y);
@@ -172,8 +172,8 @@ impl NodeTrait for Node{
 }
 
 impl Node {
-    fn get_points_inside(points: &Vec<Rc<Vec2>>, min: Vec2, max: Vec2) -> Vec<Rc<Vec2>>{
-        let inside = |point: &Rc<Vec2>| point.x < max.x && point.x > min.x && point.y < min.y && point.y > min.y;
+    fn get_points_inside(points: &Vec<Rc<RefCell<Vec2>>>, min: Vec2, max: Vec2) -> Vec<Rc<RefCell<Vec2>>>{
+        let inside = |point: &Rc<RefCell<Vec2>>| point.borrow().x < max.x && point.borrow().x > min.x && point.borrow().y < min.y && point.borrow().y > min.y;
         let new_points = points.iter().map(|p| Rc::clone(p)).filter(inside).collect();
         return new_points;
     }
@@ -187,7 +187,7 @@ impl NodeTrait for Tree {
         self.node.as_ref().unwrap().point_inside(point)
     }
 
-    fn quarter(&self, point: &Rc<Vec2>) -> Vec2{
+    fn quarter(&self, point: &Rc<RefCell<Vec2>>) -> Vec2{
         self.node.as_ref().unwrap().quarter(point)
     }
 
@@ -199,8 +199,8 @@ impl NodeTrait for Tree {
         Node::index_quarter(index)
     }
 
-    fn add_point<C>(&mut self, point: Rc<Vec2>, condition: C)
-    where C: Fn(&Vec<Rc<Vec2>>) -> bool{
+    fn add_point<C>(&mut self, point: Rc<RefCell<Vec2>>, condition: C)
+    where C: Fn(&Vec<Rc<RefCell<Vec2>>>) -> bool{
         self.node.as_mut().unwrap().add_point(point, condition);
     }
 
@@ -214,11 +214,11 @@ impl NodeTrait for Tree {
 
 pub trait NodeTrait {
     fn point_inside(&self, point: &Rc<Vec2>) -> bool;
-    fn quarter(&self, point: &Rc<Vec2>) -> Vec2;
+    fn quarter(&self, point: &Rc<RefCell<Vec2>>) -> Vec2;
     fn quarter_index(&self, quarter: Vec2) -> usize;
     fn index_quarter(index: u8) -> Result<Vec2, std::io::Error>;
-    fn add_point<C>(&mut self, point: Rc<Vec2>, condition: C)
-    where C: Fn(&Vec<Rc<Vec2>>) -> bool;
+    fn add_point<C>(&mut self, point: Rc<RefCell<Vec2>>, condition: C)
+    where C: Fn(&Vec<Rc<RefCell<Vec2>>>) -> bool;
     fn add_node(&self, quarter: Vec2) -> Result<Node, std::io::Error>;
     fn draw(&self, draw: &Draw);
     
@@ -231,6 +231,7 @@ impl Tree {
 
     pub fn draw_points(&self, draw: &Draw){
         for point in self.node.as_ref().unwrap().points.iter(){
+            let point = point.borrow();
             draw.ellipse().xy(point.xy()).w_h(5.0, 5.0).color(BLACK);
         }
 
