@@ -31,7 +31,7 @@ fn model(app: &App) -> Model {
     let num = 0.0;
     let mut points = vec![];
 
-    for i in 0..1000 {
+    for i in 0..10000 {
         let x = random_range(-500.0, 500.0);
         let y = random_range(-500.0, 500.0);
         let point = RefCell::new(vec2(x, y));
@@ -93,7 +93,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
     draw.background().color(WHITE);
     model.tree.draw(&draw);
 
-    model.tree.draw_points(&draw);
+    // model.tree.draw_points(&draw);
     draw.text(format!("FPS: {}", app.fps()).as_str())
         .color(BLACK)
         .font_size(20)

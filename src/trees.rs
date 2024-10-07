@@ -76,7 +76,7 @@ impl NodeTrait for Node {
     fn quarter(&self, point: &Rc<RefCell<Vec2>>) -> Vec2 {
         let middle_point = (self.min + self.max) / 2.0;
 
-        let direction = (point.borrow().xy() - middle_point).normalize();
+        let direction = point.borrow().xy() - middle_point;
 
         // which quarter is the point in the node?
         let mut quarter = Vec2::new(0.0, 0.0);
@@ -97,40 +97,36 @@ impl NodeTrait for Node {
     }
 
     fn add_point(&mut self, point: Rc<RefCell<Vec2>>) {
-        let quarter = self.quarter(&point);
-        let index = self.quarter_index(quarter);
-
-        // println!("{:?}", self.points);
-        // self.points.push(point.clone());
         if !self.point_inside(&point.borrow()) {
             return;
         }
 
-        if self.points.contains(&point) {
-            return;
-        }
+        // if self.points.contains(&point) {
+        //     println!("point already in tree");
+        //     // return;
+        // }
+        // let quarter = self.quarter(&point);
 
-        let point_count_in_quarter = self.how_many_points_in_quarter(quarter);
+        // let mut point_count_in_quarter = self.how_many_points_in_quarter(quarter);
 
         self.points.push(point.clone());
+        let mut current_node = self;
         // println!("point count in quarter: {:?}", point_count_in_quarter);
         // println!("point count: {:?}", self.points.len());
-        if point_count_in_quarter >= 2 {
-            // println!("point count: {:?}", self.points);
-            if self.children[index].is_none() {
-                let mut new_node = self.add_node(quarter).expect("no quarter found");
-                new_node.add_point(Rc::clone(&point));
-
-                new_node.points.push(point);
-                // new_node.is_leaf = true;
-
-                self.children[index] = Some(new_node);
-                return;
+        // TODO: OPTIMIZE!!! AND FIX
+        while current_node.point_inside(&point.borrow()) {
+            let quarter = current_node.quarter(&point);
+            if current_node.how_many_points_in_quarter(quarter) < 5 {
+                break;
             }
-            self.children[index]
-                .as_mut()
-                .unwrap()
-                .add_point(Rc::clone(&point));
+
+            let index = current_node.quarter_index(quarter);
+
+            if current_node.children[index].is_none() {             
+                current_node.children[index] = Some(current_node.add_node(quarter).expect("no quarter found"));
+            }
+            current_node = current_node.children[index].as_mut().unwrap();
+            current_node.points.push(point.clone());
         }
     }
 
@@ -273,14 +269,14 @@ impl Node {
         min: &Vec2,
         max: &Vec2,
     ) -> Vec<Rc<RefCell<Vec2>>> {
-        let inside = |point: &&Rc<RefCell<Vec2>>| {
-            point.borrow().x < max.x
-                && point.borrow().x > min.x
-                && point.borrow().y < min.y
-                && point.borrow().y > min.y
-        };
-        let new_points = points.iter().filter(inside).map(|p| Rc::clone(p)).collect();
-        return new_points;
+        points
+            .iter()
+            .filter(|point| {
+                let p = point.borrow();
+                p.x < max.x && p.x > min.x && p.y < max.y && p.y > min.y
+            })
+            .map(Rc::clone)
+            .collect()
     }
 
     fn how_many_points_in_quarter(&self, quarter: Vec2) -> usize {
@@ -297,25 +293,27 @@ impl Node {
     }
 
     fn is_inside_quarter(&self, point: &Rc<RefCell<Vec2>>, quarter: Vec2) -> bool {
-        let middle_point = (self.min + self.max) / 2.0;
+        
+        let max;
+        let min;
 
-        let mut max = Vec2::new(0.0, 0.0);
-        let mut min = Vec2::new(0.0, 0.0);
-
-        if quarter.x > 0.0 {
-            max.x = self.max.x;
-            min.x = middle_point.x;
-        } else {
-            max.x = middle_point.x;
-            min.x = self.min.x;
-        }
-
-        if quarter.y > 0.0 {
-            max.y = self.max.y;
-            min.y = middle_point.y;
-        } else {
-            max.y = middle_point.y;
-            min.y = self.min.y;
+        match quarter {
+            q if q == vec2(-1.0, 1.0) => {
+                max = Vec2::new((self.min.x + self.max.x) / 2.0, self.max.y);
+                min = Vec2::new(self.min.x, (self.min.y + self.max.y) / 2.0);
+            }
+            q if q == vec2(1.0, 1.0) => {
+                max = self.max;
+                min = Vec2::new((self.min.x + self.max.x) / 2.0, (self.min.y + self.max.y) / 2.0);
+            }
+            q if q == vec2(-1.0, -1.0) => {
+                max = Vec2::new((self.min.x + self.max.x) / 2.0, (self.min.y + self.max.y) / 2.0);
+                min = self.min;
+            }
+            _ => {
+                max = Vec2::new(self.max.x, (self.min.y + self.max.y) / 2.0);
+                min = Vec2::new((self.min.x + self.max.x) / 2.0, self.min.y);
+            }
         }
 
         point.borrow().x < max.x
@@ -387,16 +385,10 @@ impl Tree {
     }
 
     pub fn update(&mut self, points: &Vec<Rc<RefCell<Vec2>>>) {
-        self.node
-            .as_mut()
-            .unwrap()
-            .children
-            .iter_mut()
-            .for_each(|node| {
-                *node = None;
-            });
+        self.node.as_mut().unwrap().children = Box::new([None, None, None, None]);
 
-        self.node.as_mut().unwrap().points = Vec::new();
+
+        self.node.as_mut().unwrap().points.clear();
 
         for point in points.iter() {
             self.node.as_mut().unwrap().add_point(Rc::clone(point));
