@@ -1,18 +1,21 @@
+use std::borrow::BorrowMut;
+use std::sync::{Arc, Mutex};
 use std::{cell::RefCell, collections::HashSet, rc::Rc, vec};
 
 use nannou::prelude::*;
 use nannou_egui::{self, egui, Egui};
-use trees::Vec2Weapper;
+// use trees::Vec2Weapper;
 use trees::{NodeTrait, Tree};
+use std::thread;
 
 mod trees;
 
 struct Model {
     // window: Window,
     egui: Egui,
-    tree: trees::Tree,
+    tree: Arc<Mutex<trees::Tree>>,
     once: bool,
-    points: Vec<Rc<RefCell<Vec2>>>,
+    // points: Vec<Arc<Mutex<Vec2>>>,
 }
 
 fn main() {
@@ -31,34 +34,46 @@ fn model(app: &App) -> Model {
     let num = 0.0;
     let mut points = vec![];
 
-    for i in 0..1000 {
+    for i in 0..10000 {
         let x = random_range(-500.0, 500.0);
         let y = random_range(-500.0, 500.0);
-        let point = RefCell::new(vec2(x, y));
-        points.push(Rc::new(point));
+        let point = Mutex::new(vec2(x, y));
+        points.push(Arc::new(point));
     }
-    let mut tree = Tree::new(vec2(-500.0, -500.0), vec2(500.0, 500.0));
+    let mut tree = Arc::new(Mutex::new(Tree::new(vec2(-500.0, -500.0), vec2(500.0, 500.0))));
     for point in &points {
-        tree.add_point(point.clone());
+        tree.lock().unwrap().add_point(point.clone());
     }
-    Model {
+
+    let cloned_tree = tree.clone();
+
+    
+    let model = Model {
         egui,
-        tree,
+        tree: cloned_tree,
         once: true,
-        points,
-    }
+        // points,
+    };
+    thread::spawn(move || {
+        loop {
+            tree.clone().lock().unwrap().update(&points);
+        }
+    });
+    model
 }
 
 fn update(app: &App, model: &mut Model, update: Update) {
-    render_egui(&mut model.egui);
+    render_egui(&mut model.egui, &app);
+
+    
     // println!("{}", model.tree.size());
-    bouncy_points(&mut model.points);
-    for point in &model.points {
-        point.borrow_mut().x += 0.15;
-        point.borrow_mut().y += 0.15;
-    }
+    // bouncy_points(&mut model.points);
+    // for point in &model.points {
+    //     point.lock().unwrap().x += 0.15;
+    //     point.lock().unwrap().y += 0.15;
+    // }
     // let mut points: HashSet<Vec2ForHashSet> = HashSet::new();
-    model.tree.update(&model.points);
+    // model.tree.update(&model.points);
     // println!("{}", points.len());
 
     // when clicked, add a point to the tree but not when held
@@ -72,13 +87,14 @@ fn update(app: &App, model: &mut Model, update: Update) {
     //     model.once = true;
     // }
 }
-fn render_egui(egui: &mut Egui) {
+fn render_egui(egui: &mut Egui, app: &App) {
     let egui = egui;
     // egui.set_elapsed_time(update.since_start);
 
     let ctx = egui.begin_frame();
 
     egui::Window::new("Rum window").show(&ctx, |ui| {
+        ui.label(format!("FPS: {}", app.fps()));
         // ui.label("res"); // template
         // ui.add(egui::Slider::new(&mut model.num, 1.0..=40.0));
     });
@@ -91,20 +107,20 @@ fn raw_window_event(_app: &App, model: &mut Model, event: &nannou::winit::event:
 fn view(app: &App, model: &Model, frame: Frame) {
     let draw = app.draw();
     draw.background().color(WHITE);
-    model.tree.draw(&draw);
+    model.tree.lock().unwrap().draw(&draw);
 
-    model.tree.draw_points(&draw);
-    draw.text(format!("FPS: {}", app.fps()).as_str())
-        .color(BLACK)
-        .font_size(20)
-        .x_y(0.0, 0.0);
+    model.tree.lock().unwrap().draw_points(&draw);
+    // draw.text(format!("FPS: {}", app.fps()).as_str())
+    //     .color(BLACK)
+    //     .font_size(20)
+    //     .x_y(0.0, 0.0);
     draw.to_frame(app, &frame).unwrap();
     model.egui.draw_to_frame(&frame).unwrap();
 }
 
-fn bouncy_points(points: &mut Vec<Rc<RefCell<Vec2>>>) {
+fn bouncy_points(points: &mut Vec<Arc<Mutex<Vec2>>>) {
     for point in points {
-        let mut point = point.borrow_mut();
+        let mut point = point.lock().unwrap();
         if point.x > 500.0 || point.x < -500.0 {
             point.x = -point.x;
         }
