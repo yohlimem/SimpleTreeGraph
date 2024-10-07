@@ -1,7 +1,9 @@
-use geom::point;
 use nannou::{glam::Vec2Swizzles, prelude::*};
-use std::hash::{self, Hash, Hasher};
-use std::{borrow::BorrowMut, cell::RefCell, collections::HashSet, rc::Rc};
+use std::borrow::Borrow;
+use std::hash::{self, Hash};
+use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc};
+use std::thread;
 
 // TODO: MAKE UPDATE TREE!
 pub struct Tree {
@@ -21,7 +23,7 @@ pub struct Node {
 impl Tree {
     pub fn new(min: Vec2, max: Vec2) -> Self {
         Tree {
-            node: Some(Node::new(min, max, Vec::new())),
+            node: Some(Node::new(min, max, Vec::with_capacity(10000))),
             leaves: Vec::new(),
         }
     }
@@ -116,7 +118,7 @@ impl NodeTrait for Node {
         // TODO: OPTIMIZE!!! AND FIX
         while current_node.point_inside(&point.borrow()) {
             let quarter = current_node.quarter(&point);
-            if current_node.how_many_points_in_quarter(quarter) < 5 {
+            if current_node.how_many_points_in_quarter(quarter) < 50 {
                 break;
             }
 
@@ -141,21 +143,8 @@ impl NodeTrait for Node {
     }
     /// converts the quarter to an index
     fn quarter_index(&self, quarter: Vec2) -> usize {
-        // index = 0 -> top left
-        // index = 1 -> top right
-        // index = 2 -> bottom left
-        // index = 3 -> bottom right
-        let mut index = 0;
+        ((quarter.x > 0.0) as usize) | (((quarter.y > 0.0) as usize) << 1)
 
-        if quarter.x > 0.0 {
-            index += 1;
-        }
-
-        if quarter.y > 0.0 {
-            index += 2;
-        }
-
-        index
     }
     /// converts the index to a quarter
     fn index_quarter(index: u8) -> Result<Vec2, std::io::Error> {
@@ -163,7 +152,7 @@ impl NodeTrait for Node {
         // index = 1 -> top right
         // index = 2 -> bottom left
         // index = 3 -> bottom right
-        let mut quarter = Vec2::new(0.0, 0.0);
+        let quarter;
 
         match index {
             0 => quarter = Vec2::new(-1.0, 1.0),
@@ -187,30 +176,34 @@ impl NodeTrait for Node {
         // quarter = Vec2::new(1.0, -1.0) -> bottom right
         let quarter_node;
         let middle_point = (self.min + self.max) / 2.0;
+
+        let create_node = |min: Vec2, max: Vec2| -> Result<Node, std::io::Error> {
+            let new_points = Self::get_points_inside(&self.points, &min, &max);
+            Ok(Node::new(min, max, new_points))
+        };
         quarter_node = match quarter {
             q if q == vec2(-1.0, 1.0) => {
                 let min = vec2(self.min.x, middle_point.y);
                 let max = vec2(middle_point.x, self.max.y);
-                let new_points = Self::get_points_inside(&self.points, &min, &max);
-                Node::new(min, max, new_points)
+                create_node(min, max)?
             }
             q if q == vec2(1.0, 1.0) => {
                 let min = middle_point;
                 let max = self.max;
-                let new_points = Self::get_points_inside(&self.points, &min, &max);
-                Node::new(min, max, new_points)
+                create_node(min, max)?
+
             }
             q if q == vec2(-1.0, -1.0) => {
                 let min = self.min;
                 let max = middle_point;
-                let new_points = Self::get_points_inside(&self.points, &min, &max);
-                Node::new(min, max, new_points)
+                create_node(min, max)?
+
             }
             q if q == vec2(1.0, -1.0) => {
                 let min = vec2(middle_point.x, self.min.y);
                 let max = vec2(self.max.x, middle_point.y);
-                let new_points = Self::get_points_inside(&self.points, &min, &max);
-                Node::new(min, max, new_points)
+                create_node(min, max)?
+
             }
             _ => {
                 return Err(std::io::Error::new(
@@ -265,12 +258,11 @@ impl NodeTrait for Node {
 
 impl Node {
     fn get_points_inside(
-        points: &Vec<Rc<RefCell<Vec2>>>,
+        points: &[Rc<RefCell<Vec2>>],
         min: &Vec2,
         max: &Vec2,
     ) -> Vec<Rc<RefCell<Vec2>>> {
-        points
-            .iter()
+        points.iter()
             .filter(|point| {
                 let p = point.borrow();
                 p.x < max.x && p.x > min.x && p.y < max.y && p.y > min.y
@@ -294,32 +286,42 @@ impl Node {
 
     fn is_inside_quarter(&self, point: &Rc<RefCell<Vec2>>, quarter: Vec2) -> bool {
         
-        let max;
-        let min;
+        let max_x;
+        let min_x;
+        let max_y;
+        let min_y;
 
         match quarter {
             q if q == vec2(-1.0, 1.0) => {
-                max = Vec2::new((self.min.x + self.max.x) / 2.0, self.max.y);
-                min = Vec2::new(self.min.x, (self.min.y + self.max.y) / 2.0);
+                max_x = (self.min.x + self.max.x) / 2.0;
+                min_x = self.min.x;
+                max_y = self.max.y;
+                min_y = (self.min.y + self.max.y) / 2.0;
             }
             q if q == vec2(1.0, 1.0) => {
-                max = self.max;
-                min = Vec2::new((self.min.x + self.max.x) / 2.0, (self.min.y + self.max.y) / 2.0);
+                max_x = self.max.x;
+                min_x = (self.min.x + self.max.x) / 2.0;
+                max_y = self.max.y;
+                min_y = (self.min.y + self.max.y) / 2.0;
             }
             q if q == vec2(-1.0, -1.0) => {
-                max = Vec2::new((self.min.x + self.max.x) / 2.0, (self.min.y + self.max.y) / 2.0);
-                min = self.min;
+                max_x = (self.min.x + self.max.x) / 2.0;
+                min_x = self.min.x;
+                max_y = (self.min.y + self.max.y) / 2.0;
+                min_y = self.min.y;
             }
             _ => {
-                max = Vec2::new(self.max.x, (self.min.y + self.max.y) / 2.0);
-                min = Vec2::new((self.min.x + self.max.x) / 2.0, self.min.y);
+                max_x = self.max.x;
+                min_x = (self.min.x + self.max.x) / 2.0;
+                max_y = (self.min.y + self.max.y) / 2.0;
+                min_y = self.min.y;
             }
         }
 
-        point.borrow().x < max.x
-            && point.borrow().x > min.x
-            && point.borrow().y < max.y
-            && point.borrow().y > min.y
+        point.borrow().x < max_x
+            && point.borrow().x > min_x
+            && point.borrow().y < max_y
+            && point.borrow().y > min_y
     }
 }
 impl NodeTrait for Tree {
@@ -385,13 +387,23 @@ impl Tree {
     }
 
     pub fn update(&mut self, points: &Vec<Rc<RefCell<Vec2>>>) {
-        self.node.as_mut().unwrap().children = Box::new([None, None, None, None]);
+        let self_borrow = self.node.as_mut().unwrap();
+        self_borrow.children = Box::new([None, None, None, None]);
 
 
-        self.node.as_mut().unwrap().points.clear();
+        self_borrow.points.clear();
 
-        for point in points.iter() {
-            self.node.as_mut().unwrap().add_point(Rc::clone(point));
+        // for point in points.iter() {
+        //     self_borrow.add_point(Rc::clone(point));
+        // }
+
+        for chunk in points.chunks(5) {
+            thread::spawn(move || {
+                for point in chunk.iter() {
+                    self_borrow.add_point(Rc::clone(point));
+                }
+            });
         }
+        
     }
 }
