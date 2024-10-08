@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc, vec};
 
 use nannou::prelude::*;
 use nannou_egui::{self, egui, Egui};
-use trees::Vec2Weapper;
+// use trees::Vec2Weapper;
 use trees::{NodeTrait, Tree};
 
 mod trees;

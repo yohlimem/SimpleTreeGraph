@@ -1,14 +1,13 @@
-use nannou::{glam::Vec2Swizzles, prelude::*};
-use std::borrow::Borrow;
+use nannou::{prelude::*};
 use std::hash::{self, Hash};
-use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
+// use std::cell::bo
 use std::thread;
 
 // TODO: MAKE UPDATE TREE!
 pub struct Tree {
     pub node: Option<Node>,
-    pub leaves: Vec<Rc<Node>>,
+    // pub leaves: Vec<Rc<Node>>,
 }
 
 pub struct Node {
@@ -16,34 +15,17 @@ pub struct Node {
     max: Vec2,
     points: Vec<Rc<RefCell<Vec2>>>,
     children: Box<[Option<Node>; 4]>,
-    is_leaf: bool,
-    for_remove: bool,
 }
 
 impl Tree {
     pub fn new(min: Vec2, max: Vec2) -> Self {
         Tree {
             node: Some(Node::new(min, max, Vec::with_capacity(10000))),
-            leaves: Vec::new(),
+            // leaves: Vec::new(),
         }
     }
 }
 
-#[derive(Debug)]
-pub struct Vec2Weapper(Rc<RefCell<Vec2>>);
-impl Hash for Vec2Weapper {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.0.borrow().x.to_bits().hash(state);
-        self.0.borrow().y.to_bits().hash(state);
-    }
-}
-
-impl PartialEq for Vec2Weapper {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.borrow().x == other.0.borrow().x && self.0.borrow().y == other.0.borrow().y
-    }
-}
-impl Eq for Vec2Weapper {}
 
 impl Node {
     pub fn new(min: Vec2, max: Vec2, points: Vec<Rc<RefCell<Vec2>>>) -> Self {
@@ -52,33 +34,19 @@ impl Node {
             max,
             points,
             children: Box::new([None, None, None, None]),
-            for_remove: false,
-            is_leaf: true,
         }
     }
 }
 
 impl NodeTrait for Node {
     fn point_inside(&self, point: &Vec2) -> bool {
-        // let condition_x_max = point.x < self.max.x;
-        // let condition_x_min = point.x > self.min.x;
-        // let condition_y_max = point.y < self.max.y;
-        // let condition_y_min = point.y > self.min.y;
 
-        // println!("condition_x_max: {}", condition_x_max);
-        // println!("condition_x_min: {}", condition_x_min);
-        // println!("condition_y_max: {}", condition_y_max);
-        // println!("condition_y_min: {}", condition_y_min);
-        // println!("condition_y_min: {}", point.x < self.max.x
-        //                                 && point.x > self.min.x
-        //                                 && point.y < self.max.y
-        //                                 && point.y > self.min.y);
         point.x < self.max.x && point.x > self.min.x && point.y < self.max.y && point.y > self.min.y
     }
     fn quarter(&self, point: &Rc<RefCell<Vec2>>) -> Vec2 {
         let middle_point = (self.min + self.max) / 2.0;
 
-        let direction = point.borrow().xy() - middle_point;
+        let direction = *point.borrow() - middle_point;
 
         // which quarter is the point in the node?
         let mut quarter = Vec2::new(0.0, 0.0);
@@ -103,18 +71,8 @@ impl NodeTrait for Node {
             return;
         }
 
-        // if self.points.contains(&point) {
-        //     println!("point already in tree");
-        //     // return;
-        // }
-        // let quarter = self.quarter(&point);
-
-        // let mut point_count_in_quarter = self.how_many_points_in_quarter(quarter);
-
         self.points.push(point.clone());
         let mut current_node = self;
-        // println!("point count in quarter: {:?}", point_count_in_quarter);
-        // println!("point count: {:?}", self.points.len());
         // TODO: OPTIMIZE!!! AND FIX
         while current_node.point_inside(&point.borrow()) {
             let quarter = current_node.quarter(&point);
@@ -229,31 +187,6 @@ impl NodeTrait for Node {
             }
         }
     }
-
-    // fn update(&mut self) {
-    // let mut for_remove = vec![];
-    // // let mut left_points = vec![];
-
-    // for point in 0..self.points.len() {
-    //     let temp_vec = Vec2ForHashSet(self.points[point].clone());
-    //     if !self.point_inside(&self.points[point].borrow()) {
-    //         left_points.insert(temp_vec);
-    //         for_remove.push(point);
-    //     }
-    // }
-    // if for_remove.len() > 0 {
-    //     self.for_remove = true;
-    // }
-
-    // for node in 0..self.children.len() {
-    //     if let Some(n) = &mut self.children[node] {
-    //         n.update(left_points);
-    //         if n.for_remove {
-    //             self.children[node] = None;
-    //         }
-    //     }
-    // }
-    // }
 }
 
 impl Node {
@@ -368,10 +301,8 @@ pub trait NodeTrait {
     fn index_quarter(index: u8) -> Result<Vec2, std::io::Error>;
     fn add_point(&mut self, point: Rc<RefCell<Vec2>> /*, condition: C*/);
     fn remove_point(&mut self, point: Rc<RefCell<Vec2>>);
-    // where C: Fn(&Vec<Rc<RefCell<Vec2>>>) -> bool;
     fn add_node(&self, quarter: Vec2) -> Result<Node, std::io::Error>;
     fn draw(&self, draw: &Draw);
-    // fn update(&mut self);
 }
 
 impl Tree {
@@ -382,7 +313,7 @@ impl Tree {
     pub fn draw_points(&self, draw: &Draw) {
         for point in self.node.as_ref().unwrap().points.iter() {
             let point = point.borrow();
-            draw.ellipse().xy(point.xy()).w_h(5.0, 5.0).color(BLACK);
+            draw.ellipse().xy(*point).w_h(5.0, 5.0).color(BLACK);
         }
     }
 
@@ -393,16 +324,8 @@ impl Tree {
 
         self_borrow.points.clear();
 
-        // for point in points.iter() {
-        //     self_borrow.add_point(Rc::clone(point));
-        // }
-
-        for chunk in points.chunks(5) {
-            thread::spawn(move || {
-                for point in chunk.iter() {
-                    self_borrow.add_point(Rc::clone(point));
-                }
-            });
+        for point in points.iter() {
+            self_borrow.add_point(Rc::clone(point));
         }
         
     }
