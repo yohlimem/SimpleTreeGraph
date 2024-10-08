@@ -12,7 +12,7 @@ struct Model {
     egui: Egui,
     tree: trees::Tree,
     once: bool,
-    points: Vec<Rc<RefCell<Vec2>>>,
+    // points: Vec<Rc<RefCell<Vec2>>>,
 }
 
 fn main() {
@@ -37,28 +37,25 @@ fn model(app: &App) -> Model {
         let point = RefCell::new(vec2(x, y));
         points.push(Rc::new(point));
     }
-    let mut tree = Tree::new(vec2(-500.0, -500.0), vec2(500.0, 500.0));
-    for point in &points {
-        tree.add_point(point.clone());
-    }
+    let mut tree = Tree::new(vec2(-500.0, -500.0), vec2(500.0, 500.0), points);
     Model {
         egui,
         tree,
         once: true,
-        points,
     }
 }
 
 fn update(app: &App, model: &mut Model, update: Update) {
     render_egui(&mut model.egui);
     // println!("{}", model.tree.size());
-    bouncy_points(&mut model.points);
-    for point in &model.points {
+    let mut tree_points = &mut model.tree.points;
+    bouncy_points(&mut tree_points);
+    for point in tree_points {
         point.borrow_mut().x += 0.15;
         point.borrow_mut().y += 0.15;
     }
     // let mut points: HashSet<Vec2ForHashSet> = HashSet::new();
-    model.tree.update(&model.points);
+    model.tree.update();
     // println!("{}", points.len());
 
     // when clicked, add a point to the tree but not when held
