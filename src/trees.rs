@@ -1,4 +1,6 @@
 use nannou::{prelude::*};
+use rand::Error;
+use std::fmt::Debug;
 use std::hash::{self, Hash};
 use std::{cell::RefCell, rc::Rc};
 // use std::cell::bo
@@ -12,6 +14,7 @@ pub struct Tree {
     // pub leaves: Vec<Rc<Node>>,
 }
 
+// #[derive(Debug)]
 pub struct Node {
     min: Vec2,
     max: Vec2,
@@ -20,15 +23,27 @@ pub struct Node {
     existing_children: [bool; 4],
 }
 
+impl Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // f.write_str(format!("min: {}, max: {}", self.min, self.max/* , self.points*/).trim())
+        f.write_str("NAME")
+    }
+}
+
 impl Tree {
     const MASK:u8 = 15; // 00001111
     pub fn new(min: Vec2, max: Vec2, points: Vec<Rc<RefCell<Vec2>>>) -> Self {
-        Tree {
+        let node = Some(Node::new(min, max, points.iter().map(|p| p.clone()).collect()));
+        let mut tree = Tree {
             nodes: Vec::with_capacity(1000),
             points,
-            len: 0,
+            len: 1,
             // leaves: Vec::new(),
-        }
+        };
+
+        tree.nodes.push(node);
+
+        tree
     }
 }
 
@@ -114,7 +129,7 @@ impl NodeTrait for Node {
         let middle_point = (self.min + self.max) / 2.0;
 
         let create_node = |min: Vec2, max: Vec2| -> Result<Node, std::io::Error> {
-            let new_points = Self::get_points_inside(&self.points, &min, &max);
+            let new_points: Vec<Rc<RefCell<Vec2>>> = Self::get_points_inside(&self.points, &min, &max);
             Ok(Node::new(min, max, new_points))
         };
         quarter_node = match quarter {
@@ -232,7 +247,12 @@ impl Node {
 }
 impl NodeTrait for Tree {
     fn draw(&self, draw: &Draw) {
-        self.nodes[0].as_ref().unwrap().draw(draw);
+        for node in &self.nodes{
+            if let Some(node) = node {
+                node.draw(draw);
+            }
+        } 
+        
     }
 
     fn point_inside(&self, point: &Vec2) -> bool {
@@ -252,40 +272,60 @@ impl NodeTrait for Tree {
     }
 
     fn add_point(&mut self, point: &Rc<RefCell<Vec2>>)
-    /*, condition: C)
-    where C: Fn(&Vec<Rc<RefCell<Vec2>>>) -> bool*/
     {
         if !self.point_inside(&point.borrow()) {
             return;
         }
 
-        // self.points.push(point.clone());
-        let mut current_node = self.nodes.first_mut().unwrap().as_mut().unwrap();
-        // TODO: OPTIMIZE!!! AND FIX
-        while current_node.point_inside(&point.borrow()) {
-            let quarter: Vec2 = current_node.quarter(&point);
-            if current_node.how_many_points_in_quarter(quarter) < 5 {
+        let mut current_node = Some(self.nodes.first_mut().unwrap().as_mut().unwrap());
+
+        current_node.as_mut().unwrap().points.push(point.clone());
+        // TODO: OPTIMIZE!!! AND FIX BUG  
+        while current_node.as_ref().unwrap().point_inside(&point.borrow()) {
+            let quarter: Vec2 = current_node.as_ref().unwrap().quarter(&point);
+            if current_node.as_ref().unwrap().how_many_points_in_quarter(quarter) < 10 {
                 break;
             }
+            let index = current_node.as_ref().unwrap().quarter_index(quarter);
+            
+            // if you dont have children add children
+            if current_node.as_ref().unwrap().children.is_none()  {
+                let current_node_unwrap = current_node.as_mut().unwrap();
 
-            let index = current_node.quarter_index(quarter);
+                current_node_unwrap.children = Some(self.len);
 
-            if current_node.children.is_none() && current_node.existing_children[index] {
-                current_node.children = Some(self.len - 1);
-                current_node.existing_children[index] = true;
-                for i in 0..4 {
-                    if i == index {
-                        self.nodes.push(Some(current_node.add_node(quarter).expect("no quarter found")));
-                        continue;
-                    }
-                    self.nodes.push(None);
-                }
+                self.len+=4;
 
+
+                current_node_unwrap.existing_children[index] = true;
+
+                let current_child_index = current_node_unwrap.children.unwrap() + index;
+
+                let node = Some(current_node_unwrap.add_node(quarter).expect("no quarter found"));
+
+                current_node = None;
+
+                
+                self.nodes.append(&mut Self::choose_nodes(node, index).unwrap());
+
+
+                current_node = self.nodes[current_child_index].as_mut();
+
+            } else if !current_node.as_ref().unwrap().existing_children[index] { // if child is None, add the child.
+                let current_node_unwrap = current_node.as_mut().unwrap();
+                current_node_unwrap.existing_children[index] = true;
+                let node = Some(current_node_unwrap.add_node(quarter).expect("no quarter found"));
+                let current_child_index = current_node.as_ref().unwrap().children.unwrap() + index;
+
+                current_node = None;
+
+                self.nodes[current_child_index] = node;
+                current_node = self.nodes[current_child_index].as_mut();
             } else {
-                self.nodes[current_node.children.unwrap() + index] = Some(current_node.add_node(quarter).expect("no quarter found"));
+                let current_child_index = current_node.as_ref().unwrap().children.unwrap() + index;
+                self.nodes[current_child_index].as_mut().unwrap().points.push(point.clone());
+                current_node = self.nodes[current_child_index].as_mut();
             }
-            current_node = self.nodes[current_node.children.unwrap() + index].as_mut().unwrap();
-            current_node.points.push(point.clone());
         }
     }
 
@@ -317,15 +357,43 @@ impl Tree {
     }
 
     pub fn update(&mut self) {
-        // self.nodes.truncate(1);
-        // let self_borrow = self.nodes[0].as_mut().unwrap();
+        self.nodes.truncate(1);
+        self.len = 1;
+        // println!("{:?}", self.nodes);
+        let self_borrow = self.nodes[0].as_mut().unwrap();
 
 
-        // self_borrow.points.clear();
+        self_borrow.points.clear();
+        self_borrow.children = None;
+        self_borrow.existing_children = [false, false, false, false];
 
-        // for point in &mut self.points.iter() {
-        //     self.add_point(&point);
-        // }
+
+        for point in 0..self.points.len() {
+            self.add_point(&self.points[point].clone());
+        }
         
+    }
+
+    pub fn choose_nodes(node: Option<Node>, index: usize)-> Result<Vec<Option<Node>>, String>{
+        match index {
+            0 => {
+                Ok(vec![node, None, None, None])
+            }
+            1 => {
+                Ok(vec![None, node, None, None])
+                
+            }
+            2 => {
+                Ok(vec![None, None, node, None])
+                
+            }
+            3 => {
+                Ok(vec![None, None, None, node])
+                
+            }
+            _ => {
+                Err(String::from("index out of range"))
+            }
+        }
     }
 }

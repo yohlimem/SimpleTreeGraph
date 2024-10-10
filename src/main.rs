@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc, vec};
 use nannou::prelude::*;
 use nannou_egui::{self, egui, Egui};
 // use trees::Vec2Weapper;
-use trees::{NodeTrait, Tree};
+use trees::{Node, NodeTrait, Tree};
 
 mod trees;
 
@@ -61,9 +61,10 @@ fn update(app: &App, model: &mut Model, update: Update) {
     // when clicked, add a point to the tree but not when held
     // if app.mouse.buttons.left().is_down() && model.once {
     //     let mouse = app.mouse.position();
-    //     model.tree.add_point(Rc::new(RefCell::new(vec2(mouse.x, mouse.y))));
+    //     model.tree.add_point(&Rc::new(RefCell::new(vec2(mouse.x, mouse.y))));
+    //     model.tree.points.push(Rc::new(RefCell::new(vec2(mouse.x, mouse.y))));
     //     model.once = false;
-    //     println!("up");
+    //     // model.tree.update();
     // }
     // if app.mouse.buttons.left().is_up() {
     //     model.once = true;
