@@ -31,11 +31,11 @@ fn model(app: &App) -> Model {
     let num = 0.0;
     let mut points = vec![];
 
-    for i in 0..10000 {
+    for i in 0..100 {
         let x = random_range(-500.0, 500.0);
         let y = random_range(-500.0, 500.0);
-        let point = RefCell::new(vec2(x, y));
-        points.push(Rc::new(point));
+        let point = vec2(x, y);
+        points.push(point);
     }
     let mut tree = Tree::new(vec2(-500.0, -500.0), vec2(500.0, 500.0), points);
     Model {
@@ -48,13 +48,12 @@ fn model(app: &App) -> Model {
 fn update(app: &App, model: &mut Model, update: Update) {
     render_egui(&mut model.egui);
     // println!("{}", model.tree.size());
-    // let mut tree_points = &mut model.tree.points;
-    // bouncy_points(&mut tree_points);
-    // for point in tree_points {
-    //     point.borrow_mut().x += 0.15;
-    //     point.borrow_mut().y += 0.15;
-    // }
-    // let mut points: HashSet<Vec2ForHashSet> = HashSet::new();
+    let mut tree_points = &mut model.tree.points;
+    bouncy_points(&mut tree_points);
+    for point in tree_points {
+        point.x += 0.15;
+        point.y += 0.15;
+    }
     model.tree.update();
     // println!("{}", points.len());
 
@@ -91,7 +90,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
     draw.background().color(WHITE);
     model.tree.draw(&draw);
 
-    // model.tree.draw_points(&draw);
+    model.tree.draw_points(&draw);
     draw.text(format!("FPS: {}", app.fps()).as_str())
         .color(BLACK)
         .font_size(20)
@@ -100,9 +99,9 @@ fn view(app: &App, model: &Model, frame: Frame) {
     model.egui.draw_to_frame(&frame).unwrap();
 }
 
-fn bouncy_points(points: &mut Vec<Rc<RefCell<Vec2>>>) {
+fn bouncy_points(points: &mut Vec<Vec2>) {
     for point in points {
-        let mut point = point.borrow_mut();
+        let mut point = point;
         if point.x > 500.0 || point.x < -500.0 {
             point.x = -point.x;
         }
