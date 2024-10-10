@@ -173,7 +173,7 @@ impl NodeTrait for Node {
             .xy(mid_points)
             .w_h(self.max.x - self.min.x, self.max.y - self.min.y)
             .stroke_weight(1.0)
-            .color(rgb(1.0, self.points.len() as f32 / 20.0, 0.2));
+            .color(rgb(1.0, 1.0-self.points.len() as f32 / 20.0, 0.2));
     }
 }
 
@@ -195,9 +195,6 @@ impl Node {
     fn how_many_points_in_quarter(&self, quarter: Vec2) -> usize {
         let mut points = 0;
         for point in self.points.iter() {
-            if !self.point_inside(&point.borrow()) {
-                continue;
-            }
             if self.is_inside_quarter(point, quarter) {
                 points += 1;
             }
@@ -283,7 +280,7 @@ impl NodeTrait for Tree {
         // TODO: OPTIMIZE!!! AND FIX BUG  
         while current_node.as_ref().unwrap().point_inside(&point.borrow()) {
             let quarter: Vec2 = current_node.as_ref().unwrap().quarter(&point);
-            if current_node.as_ref().unwrap().how_many_points_in_quarter(quarter) < 10 {
+            if current_node.as_ref().unwrap().how_many_points_in_quarter(quarter) < 5 {
                 break;
             }
             let index = current_node.as_ref().unwrap().quarter_index(quarter);
@@ -313,7 +310,9 @@ impl NodeTrait for Tree {
 
             } else if !current_node.as_ref().unwrap().existing_children[index] { // if child is None, add the child.
                 let current_node_unwrap = current_node.as_mut().unwrap();
+
                 current_node_unwrap.existing_children[index] = true;
+
                 let node = Some(current_node_unwrap.add_node(quarter).expect("no quarter found"));
                 let current_child_index = current_node.as_ref().unwrap().children.unwrap() + index;
 
@@ -360,12 +359,12 @@ impl Tree {
         self.nodes.truncate(1);
         self.len = 1;
         // println!("{:?}", self.nodes);
-        let self_borrow = self.nodes[0].as_mut().unwrap();
+        let first_borrow = self.nodes[0].as_mut().unwrap();
 
 
-        self_borrow.points.clear();
-        self_borrow.children = None;
-        self_borrow.existing_children = [false, false, false, false];
+        first_borrow.points.clear();
+        first_borrow.children = None;
+        first_borrow.existing_children = [false, false, false, false];
 
 
         for point in 0..self.points.len() {

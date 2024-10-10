@@ -48,12 +48,12 @@ fn model(app: &App) -> Model {
 fn update(app: &App, model: &mut Model, update: Update) {
     render_egui(&mut model.egui);
     // println!("{}", model.tree.size());
-    let mut tree_points = &mut model.tree.points;
-    bouncy_points(&mut tree_points);
-    for point in tree_points {
-        point.borrow_mut().x += 0.15;
-        point.borrow_mut().y += 0.15;
-    }
+    // let mut tree_points = &mut model.tree.points;
+    // bouncy_points(&mut tree_points);
+    // for point in tree_points {
+    //     point.borrow_mut().x += 0.15;
+    //     point.borrow_mut().y += 0.15;
+    // }
     // let mut points: HashSet<Vec2ForHashSet> = HashSet::new();
     model.tree.update();
     // println!("{}", points.len());
